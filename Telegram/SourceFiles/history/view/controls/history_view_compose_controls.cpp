@@ -5196,7 +5196,10 @@ void ComposeControls::updateControlsVisibility() {
 }
 
 void ComposeControls::updateAiButtonVisibility() {
-	const auto hidden = true;
+	const auto hidden = !hasEnoughLinesForAi()
+		|| !_wrap->isVisible()
+		|| _recording.current()
+		|| !_field->isVisible();
 	if (_aiButton->isHidden() == hidden) {
 		return;
 	}
@@ -5234,7 +5237,9 @@ bool ComposeControls::canShowRichEditor() const {
 }
 
 void ComposeControls::updateExpandButtonVisibility() {
-	const auto hidden = !canShowRichEditor() || !hasEnoughLinesForExpand();
+	const auto hidden = !AyuSettings::getInstance().showAiEditorButtonInMessageField()
+		|| !canShowRichEditor()
+		|| !hasEnoughLinesForExpand();
 	if (_expand->isHidden() != hidden) {
 		_expand->setVisible(!hidden);
 	}

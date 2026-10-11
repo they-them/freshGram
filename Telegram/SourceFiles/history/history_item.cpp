@@ -1860,6 +1860,15 @@ bool HistoryItem::isIncomingUnreadMedia() const {
 	return !out() && isUnreadMedia();
 }
 
+bool HistoryItem::keepsUnburnt() const {
+	const auto media = _media.get();
+	return AyuSettings::getInstance().saveDeletedMessages()
+		&& !out()
+		&& isRegular()
+		&& media
+		&& (media->ttlSeconds() > 0);
+}
+
 bool HistoryItem::isTtlCoveredMedia() const {
 	const auto media = _media.get();
 	if (!media || !media->ttlSeconds()) {
@@ -2954,6 +2963,11 @@ void HistoryItem::clearMediaAsExpired() {
 
 	const auto &settings = AyuSettings::getInstance();
 	if (settings.saveDeletedMessages()) {
+		if (!_deleted) {
+			RemoveComponents(HistoryServiceSelfDestruct::Bit());
+			_ayuExpired = true;
+			setDeleted();
+		}
 		return;
 	}
 

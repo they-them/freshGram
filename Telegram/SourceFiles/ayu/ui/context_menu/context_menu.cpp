@@ -956,8 +956,15 @@ void AddReadUntilAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 }
 
 void AddBurnAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
-	if (!item->media() || (item->media()->ttlSeconds() <= 0 && item->unsupportedTTL() <= 0) || item->out() ||
-		!item->hasUnreadMediaFlag()) {
+	// An unsupported disappearing message (a photo or a video that the
+	// desktop shows as a service text) has no media, only the TTL mark.
+	// The unread mark is not checked: it is cleared locally when the message
+	// is viewed, while the server may still not know about it. Once the
+	// server burns the message, it loses the TTL mark and the item is hidden.
+	const auto media = item->media();
+	const auto ttl = (media && media->ttlSeconds() > 0)
+		|| (item->unsupportedTTL() > 0);
+	if (!ttl || item->out() || item->isDeleted()) {
 		return;
 	}
 
@@ -966,15 +973,22 @@ void AddBurnAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 		[=]
 		{
 			const auto ids = MTP_vector<MTPint>(1, MTP_int(item->id));
+			const auto fullId = item->fullId();
+			const auto session = &item->history()->session();
 
-			item->history()->session().api().request(MTPmessages_ReadMessageContents(
+			session->api().request(MTPmessages_ReadMessageContents(
 					ids
 				)).done([=](const MTPmessages_AffectedMessages &result)
 				{
-					item->history()->session().api().applyAffectedMessages(
-						item->history()->peer,
+					const auto burnt = session->data().message(fullId);
+					if (!burnt) {
+						return;
+					}
+					session->api().applyAffectedMessages(
+						burnt->history()->peer,
 						result);
-					item->markContentsRead();
+					burnt->markContentsRead();
+					burnt->clearMediaAsExpired();
 				}).send();
 		},
 		&st::menuIconTTLAny);

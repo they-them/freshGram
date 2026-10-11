@@ -974,6 +974,7 @@ HistoryWidget::HistoryWidget(
 			for (const auto &block : _history->blocks) {
 				for (const auto &view : block->messages) {
 					view->unloadHeavyPart();
+					view->previousInBlocksChanged();
 				}
 			}
 		}
@@ -7488,7 +7489,9 @@ bool HistoryWidget::textExceedsMaxSize() const {
 }
 
 void HistoryWidget::updateAiButtonVisibility() {
-	const auto hidden = true;
+	const auto hidden = !hasEnoughLinesForAi()
+		|| !_send->isVisible()
+		|| !_field->isVisible();
 	if (_aiButton->isHidden() == hidden) {
 		return;
 	}
@@ -7517,7 +7520,9 @@ bool HistoryWidget::canShowRichEditor() const {
 }
 
 void HistoryWidget::updateExpandButtonVisibility() {
-	const auto hidden = !canShowRichEditor() || !hasEnoughLinesForExpand();
+	const auto hidden = !AyuSettings::getInstance().showAiEditorButtonInMessageField()
+		|| !canShowRichEditor()
+		|| !hasEnoughLinesForExpand();
 	if (_expand->isHidden() != hidden) {
 		_expand->setVisible(!hidden);
 	}
@@ -11142,11 +11147,19 @@ void HistoryWidget::clearSelected() {
 
 HistoryItem *HistoryWidget::getItemFromHistoryOrMigrated(
 		MsgId genericMsgId) const {
-	return (genericMsgId < 0 && -genericMsgId < ServerMaxMsgId && _migrated)
+	const auto result = (genericMsgId < 0 && -genericMsgId < ServerMaxMsgId && _migrated)
 		? session().data().message(_migrated->peer, -genericMsgId)
 		: _peer
 		? session().data().message(_peer, genericMsgId)
 		: nullptr;
+	if (result || !_history || !IsServerMsgId(genericMsgId)) {
+		return result;
+	}
+	const auto restored = _history->ayuRestoredByOriginalId(genericMsgId);
+	if (restored && !restored->mainView()) {
+		_history->checkLocalMessages();
+	}
+	return restored;
 }
 
 MessageIdsList HistoryWidget::getSelectedItems() const {

@@ -46,6 +46,11 @@ enum class TranslationProvider {
 	Native = 3,
 };
 
+enum class TranscriptionProvider {
+	Telegram = 0,
+	WhisperLocal = 1,
+};
+
 enum class SendWithoutSoundOption {
 	Never = 0,
 	InGhostMode = 1,
@@ -75,6 +80,11 @@ NLOHMANN_JSON_SERIALIZE_ENUM(TranslationProvider, {
 	{TranslationProvider::Google, "google"},
 	{TranslationProvider::Yandex, "yandex"},
 	{TranslationProvider::Native, "native"},
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM(TranscriptionProvider, {
+	{TranscriptionProvider::Telegram, "telegram"},
+	{TranscriptionProvider::WhisperLocal, "whisper"},
 })
 
 NLOHMANN_JSON_SERIALIZE_ENUM(SendWithoutSoundOption, {
@@ -298,7 +308,10 @@ public:
 	[[nodiscard]] bool increaseWebviewWidth() const { return _increaseWebviewWidth.current(); }
 	[[nodiscard]] bool materialSwitches() const { return _materialSwitches.current(); }
 	[[nodiscard]] bool materialBubbles() const { return _materialBubbles.current(); }
-	[[nodiscard]] bool materialIcons() const { return _materialIcons.current(); }
+	[[nodiscard]] int iconSet() const { return _iconSet.current(); }
+	[[nodiscard]] int designStyle() const { return _designStyle.current(); }
+	[[nodiscard]] const QString &whisperModel() const { return _whisperModel.current(); }
+	[[nodiscard]] const QString &ocrLanguages() const { return _ocrLanguages.current(); }
 	[[nodiscard]] int maxEditRevisions() const { return _maxEditRevisions.current(); }
 	[[nodiscard]] int deletedRestoreLimit() const { return _deletedRestoreLimit.current(); }
 	[[nodiscard]] int keptSnapshotLimit() const { return _keptSnapshotLimit.current(); }
@@ -379,6 +392,10 @@ public:
 	[[nodiscard]] bool keepDeletedTopics() const { return _keepDeletedTopics.current(); }
 	[[nodiscard]] bool restoreDeletedInChats() const { return _restoreDeletedInChats.current(); }
 	[[nodiscard]] bool showDeletedChatIcon() const { return _showDeletedChatIcon.current(); }
+	[[nodiscard]] bool localPinnedChats() const { return _localPinnedChats.current(); }
+	[[nodiscard]] bool keepDraftsLocal() const { return _keepDraftsLocal.current(); }
+	[[nodiscard]] bool reduceNetworkTracking() const { return _reduceNetworkTracking.current(); }
+	[[nodiscard]] bool enableDebugLogging() const { return _enableDebugLogging.current(); }
 	[[nodiscard]] bool markOldMessagesDeleted() const { return _markOldMessagesDeleted.current(); }
 	[[nodiscard]] bool showTimeZone() const { return _showTimeZone.current(); }
 	[[nodiscard]] bool showMessageShot() const { return _showMessageShot.current(); }
@@ -388,6 +405,7 @@ public:
 	[[nodiscard]] bool voiceConfirmation() const { return _voiceConfirmation.current(); }
 	[[nodiscard]] bool roundConfirmation() const { return _roundConfirmation.current(); }
 	[[nodiscard]] TranslationProvider translationProvider() const { return _translationProvider.current(); }
+	[[nodiscard]] TranscriptionProvider transcriptionProvider() const { return _transcriptionProvider.current(); }
 	[[nodiscard]] bool adaptiveCoverColor() const { return _adaptiveCoverColor.current(); }
 	[[nodiscard]] bool improveLinkPreviews() const { return _improveLinkPreviews.current(); }
 	[[nodiscard]] bool crashReporting() const { return _crashReporting.current(); }
@@ -421,7 +439,10 @@ public:
 	void setIncreaseWebviewWidth(bool val);
 	void setMaterialSwitches(bool val);
 	void setMaterialBubbles(bool val);
-	void setMaterialIcons(bool val);
+	void setIconSet(int val);
+	void setDesignStyle(int val);
+	void setWhisperModel(const QString &val);
+	void setOcrLanguages(const QString &val);
 	void setMaxEditRevisions(int val);
 	void setDeletedRestoreLimit(int val);
 	void setKeptSnapshotLimit(int val);
@@ -490,6 +511,10 @@ public:
 	void setKeepDeletedTopics(bool val);
 	void setRestoreDeletedInChats(bool val);
 	void setShowDeletedChatIcon(bool val);
+	void setLocalPinnedChats(bool val);
+	void setKeepDraftsLocal(bool val);
+	void setReduceNetworkTracking(bool val);
+	void setEnableDebugLogging(bool val);
 	void setMarkOldMessagesDeleted(bool val);
 	void setShowTimeZone(bool val);
 	void setShowMessageShot(bool val);
@@ -499,6 +524,7 @@ public:
 	void setVoiceConfirmation(bool val);
 	void setRoundConfirmation(bool val);
 	void setTranslationProvider(TranslationProvider val);
+	void setTranscriptionProvider(TranscriptionProvider val);
 	void setAdaptiveCoverColor(bool val);
 	void setImproveLinkPreviews(bool val);
 	void setCrashReporting(bool val);
@@ -554,8 +580,6 @@ public:
 	[[nodiscard]] rpl::producer<bool> materialSwitchesChanges() const { return _materialSwitches.changes(); }
 	[[nodiscard]] rpl::producer<bool> materialBubblesValue() const { return _materialBubbles.value(); }
 	[[nodiscard]] rpl::producer<bool> materialBubblesChanges() const { return _materialBubbles.changes(); }
-	[[nodiscard]] rpl::producer<bool> materialIconsValue() const { return _materialIcons.value(); }
-	[[nodiscard]] rpl::producer<bool> materialIconsChanges() const { return _materialIcons.changes(); }
 	[[nodiscard]] rpl::producer<int> replyBackgroundOpacityValue() const { return _replyBackgroundOpacity.value(); }
 	[[nodiscard]] rpl::producer<int> replyBackgroundOpacityChanges() const { return _replyBackgroundOpacity.changes(); }
 	[[nodiscard]] rpl::producer<int> reactionBackgroundOpacityValue() const { return _reactionBackgroundOpacity.value(); }
@@ -646,6 +670,8 @@ public:
 	[[nodiscard]] rpl::producer<bool> showStreamerToggleInTrayChanges() const { return _showStreamerToggleInTray.changes(); }
 	[[nodiscard]] rpl::producer<QString> monoFontValue() const { return _monoFont.value(); }
 	[[nodiscard]] rpl::producer<QString> monoFontChanges() const { return _monoFont.changes(); }
+	[[nodiscard]] rpl::producer<QString> whisperModelValue() const { return _whisperModel.value(); }
+	[[nodiscard]] rpl::producer<QString> ocrLanguagesValue() const { return _ocrLanguages.value(); }
 	[[nodiscard]] rpl::producer<bool> hideNotificationCountersValue() const { return _hideNotificationCounters.value(); }
 	[[nodiscard]] rpl::producer<bool> hideNotificationCountersChanges() const { return _hideNotificationCounters.changes(); }
 	[[nodiscard]] rpl::producer<bool> hideNotificationBadgeValue() const { return _hideNotificationBadge.value(); }
@@ -678,6 +704,7 @@ public:
 	[[nodiscard]] rpl::producer<bool> roundConfirmationChanges() const { return _roundConfirmation.changes(); }
 	[[nodiscard]] rpl::producer<TranslationProvider> translationProviderValue() const { return _translationProvider.value(); }
 	[[nodiscard]] rpl::producer<TranslationProvider> translationProviderChanges() const { return _translationProvider.changes(); }
+	[[nodiscard]] rpl::producer<TranscriptionProvider> transcriptionProviderValue() const { return _transcriptionProvider.value(); }
 	[[nodiscard]] rpl::producer<bool> adaptiveCoverColorValue() const { return _adaptiveCoverColor.value(); }
 	[[nodiscard]] rpl::producer<bool> adaptiveCoverColorChanges() const { return _adaptiveCoverColor.changes(); }
 	[[nodiscard]] rpl::producer<bool> improveLinkPreviewsValue() const { return _improveLinkPreviews.value(); }
@@ -726,7 +753,10 @@ private:
 	rpl::variable<bool> _increaseWebviewWidth = false;
 	rpl::variable<bool> _materialSwitches = true;
 	rpl::variable<bool> _materialBubbles = true;
-	rpl::variable<bool> _materialIcons = true;
+	rpl::variable<int> _iconSet = 1;
+	rpl::variable<int> _designStyle = 1;
+	rpl::variable<QString> _whisperModel;
+	rpl::variable<QString> _ocrLanguages;
 	rpl::variable<int> _maxEditRevisions = 100;
 	rpl::variable<int> _deletedRestoreLimit = 3000;
 	rpl::variable<int> _keptSnapshotLimit = 100;
@@ -796,6 +826,10 @@ private:
 	rpl::variable<bool> _keepDeletedTopics = false;
 	rpl::variable<bool> _restoreDeletedInChats = true;
 	rpl::variable<bool> _showDeletedChatIcon = true;
+	rpl::variable<bool> _localPinnedChats = true;
+	rpl::variable<bool> _keepDraftsLocal = false;
+	rpl::variable<bool> _reduceNetworkTracking = false;
+	rpl::variable<bool> _enableDebugLogging = false;
 	rpl::variable<bool> _markOldMessagesDeleted = true;
 	rpl::variable<bool> _showTimeZone = false;
 	rpl::variable<bool> _showMessageShot = true;
@@ -805,6 +839,7 @@ private:
 	rpl::variable<bool> _voiceConfirmation = false;
 	rpl::variable<bool> _roundConfirmation = false;
 	rpl::variable<TranslationProvider> _translationProvider = TranslationProvider::Telegram;
+	rpl::variable<TranscriptionProvider> _transcriptionProvider = TranscriptionProvider::Telegram;
 	rpl::variable<bool> _adaptiveCoverColor = true;
 	rpl::variable<bool> _improveLinkPreviews = false;
 	rpl::variable<bool> _crashReporting = true;
