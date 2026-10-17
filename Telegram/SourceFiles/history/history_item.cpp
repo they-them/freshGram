@@ -4055,6 +4055,16 @@ QString HistoryItem::originalPostAuthor() const {
 	return QString();
 }
 
+void HistoryItem::ayuSetFromRank(const QString &rank) {
+	if (rank.isEmpty()) {
+		return;
+	}
+	if (!Has<HistoryMessageFromRank>()) {
+		AddComponents(HistoryMessageFromRank::Bit());
+	}
+	Get<HistoryMessageFromRank>()->rank = rank;
+}
+
 QString HistoryItem::fromRank() const {
 	if (const auto component = Get<HistoryMessageFromRank>()) {
 		return component->rank;
@@ -4221,6 +4231,9 @@ void HistoryItem::setDeleted() {
 	if (!_ayuDeletedAt) {
 		_ayuDeletedAt = base::unixtime::now();
 	}
+	history()->session().changes().messageUpdated(
+		this,
+		Data::MessageUpdate::Flag::Deleted);
 
 	// cleanup reactions as they tend to bug with deleted messages
 	if (hasUnreadReaction()) {

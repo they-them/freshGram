@@ -130,6 +130,13 @@ set(ayugram_files
         ayu/utils/builtin_lang.h
         ayu/utils/crash_trace.cpp
         ayu/features/fake_passcode/fake_passcode.cpp
+        ayu/features/compose_stash/compose_stash.h
+        ayu/features/compose_stash/compose_stash_hint.cpp
+        ayu/features/compose_stash/compose_stash_hint.h
+        ayu/features/compose_stash/compose_stash_manager.cpp
+        ayu/features/compose_stash/compose_stash_manager.h
+        ayu/features/compose_stash/compose_stash_storage.cpp
+        ayu/features/compose_stash/compose_stash_storage.h
         ayu/features/fake_passcode/fake_passcode.h
         ayu/features/recognition/local_transcribe.cpp
         ayu/features/recognition/local_transcribe.h
@@ -141,11 +148,17 @@ set(ayugram_files
         ayu/features/recognition/text_recognition.cpp
         ayu/features/recognition/text_recognition.h
         ayu/features/recognition/speech_recognition.h
+        ayu/ui/boxes/delete_own_messages_box.cpp
+        ayu/ui/boxes/delete_own_messages_box.h
+        ayu/ui/boxes/delete_own_topics_box.cpp
+        ayu/ui/boxes/delete_own_topics_box.h
         ayu/ui/boxes/fake_passcode_box.cpp
         ayu/ui/boxes/fake_passcode_box.h
         ayu/ui/boxes/recognition_models_box.cpp
         ayu/ui/components/recognition_picker.cpp
         ayu/ui/components/recognition_picker.h
+        ayu/ui/components/stash_button.cpp
+        ayu/ui/components/stash_button.h
         ayu/ui/boxes/recognition_models_box.h
         ayu/ui/fagram/fagram_nav_drawer.cpp
         ayu/ui/fagram/fagram_nav_drawer.h
@@ -314,6 +327,7 @@ set(ayugram_files
         ayu/secret/secret_policy.h
         ayu/secret/secret_protocol.cpp
         ayu/secret/secret_protocol.h
+        ayu/secret/secret_rekey.h
         ayu/secret/secret_send.cpp
         ayu/secret/secret_send.h
         ayu/secret/secret_tl.h
@@ -328,6 +342,18 @@ set(ayugram_files
         ayu/data/ayu_vault.cpp
         ayu/data/ayu_vault.h
         ayu/data/ayu_database_backup.h
+        ayu/data/ayu_database_report.cpp
+        ayu/data/ayu_database_report.h
+        ayu/data/ayu_encrypted_vfs.cpp
+        ayu/data/ayu_encrypted_vfs.h
+        ayu/data/ayu_legacy_copy.cpp
+        ayu/data/ayu_legacy_copy.h
+        ayu/data/ayu_migration_v4.cpp
+        ayu/data/ayu_migration_v4.h
+        ayu/data/message_rows.cpp
+        ayu/data/message_rows.h
+        ayu/data/message_schema.h
+        ayu/data/message_types.h
 
         info/profile/info_profile_music_button.cpp
         info/profile/info_profile_music_button.h
@@ -2555,36 +2581,41 @@ elseif (APPLE)
                     XCODE_EXPLICIT_FILE_TYPE "folder.iconcomposer.icon"
             )
         endforeach()
+    endif()
+
+    # The Icon Composer files above are compiled only by Xcode 26 and newer,
+    # so older Xcode versions would leave the bundle without any icon.
+    # The classic .icns (CFBundleIconFile) is built for every generator.
+    set(icon_path ${icons_path}/Icon.iconset)
+    find_program(ICONUTIL iconutil)
+    find_program(PNG2ICNS png2icns)
+    if (ICONUTIL)
+        add_custom_command(
+            OUTPUT AppIcon-Default.icns
+            COMMAND ${ICONUTIL}
+            ARGS
+                --convert icns
+                --output AppIcon-Default.icns
+                ${icon_path}
+        )
+    elseif (PNG2ICNS)
+        add_custom_command(
+            OUTPUT AppIcon-Default.icns
+            COMMAND ${PNG2ICNS}
+            ARGS
+                AppIcon-Default.icns
+                ${icon_path}/icon_16x16.png
+                ${icon_path}/icon_32x32.png
+                ${icon_path}/icon_128x128.png
+                ${icon_path}/icon_256x256.png
+                ${icon_path}/icon_512x512.png
+        )
+    endif()
+    if (ICONUTIL OR PNG2ICNS)
+        set_source_files_properties(AppIcon-Default.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+        target_add_resource(Telegram AppIcon-Default.icns)
     else()
-        set(icon_path ${icons_path}/Icon.iconset)
-        find_program(ICONUTIL iconutil)
-        find_program(PNG2ICNS png2icns)
-        if (ICONUTIL)
-            add_custom_command(
-                OUTPUT AppIcon-Default.icns
-                COMMAND ${ICONUTIL}
-                ARGS
-                    --convert icns
-                    --output AppIcon-Default.icns
-                    ${icon_path}
-            )
-        elseif (PNG2ICNS)
-            add_custom_command(
-                OUTPUT AppIcon-Default.icns
-                COMMAND ${PNG2ICNS}
-                ARGS
-                    AppIcon-Default.icns
-                    ${icon_path}/icon_16x16.png
-                    ${icon_path}/icon_32x32.png
-                    ${icon_path}/icon_128x128.png
-                    ${icon_path}/icon_256x256.png
-                    ${icon_path}/icon_512x512.png
-            )
-        endif()
-        if (ICONUTIL OR PNG2ICNS)
-            set_source_files_properties(AppIcon-Default.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-            target_add_resource(Telegram AppIcon-Default.icns)
-        endif()
+        message(WARNING "Neither iconutil nor png2icns was found, the application will have no icon.")
     endif()
 
     set(lang_packs
@@ -2699,6 +2730,12 @@ target_sources(Telegram PRIVATE ${entitlement_sources})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/Telegram PREFIX Resources FILES ${entitlement_sources})
 
 target_include_directories(Telegram PRIVATE ${src_loc})
+
+# The database report reads the page usage of every table from dbstat.
+set_source_files_properties(
+    ${src_loc}/ayu/libs/sqlite/sqlite3.c
+    PROPERTIES COMPILE_DEFINITIONS SQLITE_ENABLE_DBSTAT_VTAB
+)
 
 target_compile_definitions(Telegram
 PRIVATE

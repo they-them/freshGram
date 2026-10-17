@@ -1,6 +1,7 @@
 // This file is part of freshGram.
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 
@@ -13,6 +14,8 @@ namespace AyuVault {
 
 void SetKey(MTP::AuthKeyPtr key);
 [[nodiscard]] bool HasKey();
+// A key of 32 bytes for one purpose, made from the local key.
+[[nodiscard]] bool DeriveKey(const char *label, unsigned char *out, size_t size);
 
 [[nodiscard]] bool IsSealed(const QByteArray &bytes);
 [[nodiscard]] QByteArray Seal(const QByteArray &plain);
@@ -23,6 +26,8 @@ void SetKey(MTP::AuthKeyPtr key);
 
 bool WriteFile(const QString &path, const QByteArray &plain);
 bool WriteSealedFile(const QString &path, const QByteArray &plain);
+// Packs the data by blocks and seals every block, only one block is held at a time.
+bool WriteCompressedFile(const QString &path, const unsigned char *data, qint64 size);
 [[nodiscard]] std::optional<QByteArray> ReadFile(
 	const QString &path,
 	bool requireSealed = false);

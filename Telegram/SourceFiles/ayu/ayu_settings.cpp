@@ -4,6 +4,7 @@
 // but be respectful and credit the original author.
 //
 // Copyright @Radolyn, 2026
+#include "ayu/data/ayu_vault.h"
 #include "ayu/utils/crash_trace.h"
 #include "ayu/utils/debug_logging.h"
 #include "ayu/utils/network_privacy.h"
@@ -31,10 +32,19 @@
 #include <filesystem>
 #include <fstream>
 #include <QApplication>
+#include <QFile>
 
 using json = nlohmann::json;
 
 namespace {
+
+constexpr auto kMaxSettingsSize = std::uintmax_t(2) * 1024 * 1024;
+
+bool AccountsAttached = false;
+
+QString getAccountsPath() {
+	return cWorkingDir() + u"tdata/ayu_accounts.enc"_q;
+}
 
 std::filesystem::path getSettingsPath() {
 	const auto path = cWorkingDir() + u"tdata/ayu_settings.json"_q;
@@ -403,6 +413,12 @@ void AyuSettings::load() {
 		AyuNetworkPrivacy::SetEnabled(settings.reduceNetworkTracking());
 		AyuDebugLogging::SetEnabled(settings.enableDebugLogging());
 	});
+	auto sizeError = std::error_code();
+	const auto size = std::filesystem::file_size(getSettingsPath(), sizeError);
+	if (!sizeError && size > kMaxSettingsSize) {
+		LOG(("AyuGramSettings: the settings file is too big, ignoring it"));
+		return;
+	}
 	std::ifstream file(getSettingsPath());
 	if (!file.good()) {
 		return;
@@ -415,7 +431,8 @@ void AyuSettings::load() {
 		file >> p;
 		file.close();
 
-		if (!p.contains("ghostModeSettings")) {
+		if (!p.contains("ghostModeSettings")
+			&& !p.value("accountsVaulted", false)) {
 			p["ghostModeSettings"] = nlohmann::json::object({
 				{"0", {
 					{"sendReadMessages", p.value("sendReadMessages", true)},
@@ -442,22 +459,80 @@ void AyuSettings::load() {
 		LOG(("AyuGramSettings: failed to read settings file (not json-like)"));
 	}
 
-	if (cGhost()) {
-		auto &ghost = AyuSettings::ghost();
-		ghost._sendReadMessages = false;
-		ghost._sendReadStories = false;
-		ghost._sendOnlinePackets = false;
-		ghost._sendUploadProgress = false;
-		ghost._sendOfflinePacketAfterOnline = true;
-	}
+	applyForcedGhost();
 
 	AyuFeatures::StreamerMode::refresh();
 	settings.validate();
 }
 
+void AyuSettings::applyForcedGhost() {
+	if (!cGhost()) {
+		return;
+	}
+	auto &ghost = AyuSettings::ghost();
+	ghost._sendReadMessages = false;
+	ghost._sendReadStories = false;
+	ghost._sendOnlinePackets = false;
+	ghost._sendUploadProgress = false;
+	ghost._sendOfflinePacketAfterOnline = true;
+}
+
+void AyuSettings::attachVault() {
+	if (!AyuVault::HasKey()) {
+		return;
+	}
+	auto &settings = getInstance();
+	AccountsAttached = true;
+	const auto path = getAccountsPath();
+	if (const auto bytes = AyuVault::ReadFile(path, true)) {
+		try {
+			const auto p = json::parse(bytes->constBegin(), bytes->constEnd());
+			if (p.contains("ghostModeSettings")
+				&& p["ghostModeSettings"].is_object()) {
+				for (auto &[key, value] : p["ghostModeSettings"].items()) {
+					auto &slot = settings._ghostAccounts[std::stoull(key)];
+					if (!slot) {
+						slot = std::make_unique<GhostModeAccountSettings>();
+					}
+					value.get_to(*slot);
+				}
+			}
+			if (p.contains("shadowBanIds")) {
+				settings._shadowBanIds = p["shadowBanIds"].get<
+					std::unordered_set<int64>>();
+			}
+		} catch (...) {
+			LOG(("AyuGramSettings: failed to parse the sealed accounts data"));
+		}
+	} else if (QFile::exists(path)) {
+		LOG(("AyuGramSettings: could not read the sealed accounts data"));
+	}
+	applyForcedGhost();
+	save();
+}
+
 void AyuSettings::save() {
 	auto &settings = getInstance();
 	json p = settings;
+
+	auto strip = settings._accountsVaulted;
+	if (AccountsAttached) {
+		const auto sealed = json{
+			{ "ghostModeSettings", p["ghostModeSettings"] },
+			{ "shadowBanIds", p["shadowBanIds"] },
+		};
+		strip = AyuVault::WriteSealedFile(
+			getAccountsPath(),
+			QByteArray::fromStdString(sealed.dump()));
+		if (strip) {
+			settings._accountsVaulted = true;
+		}
+	}
+	if (strip) {
+		p.erase("ghostModeSettings");
+		p.erase("shadowBanIds");
+	}
+	p["accountsVaulted"] = settings._accountsVaulted;
 
 	std::ofstream file;
 	file.open(getSettingsPath());
@@ -466,7 +541,9 @@ void AyuSettings::save() {
 }
 
 void AyuSettings::reset() {
+	const auto vaulted = getInstance()._accountsVaulted;
 	getInstance() = AyuSettings();
+	getInstance()._accountsVaulted = vaulted;
 	save();
 }
 
@@ -586,6 +663,12 @@ void AyuSettings::validate() {
 void AyuSettings::setSaveDeletedMessages(bool val) {
 	if (_saveDeletedMessages.current() == val) return;
 	_saveDeletedMessages = val;
+	save();
+}
+
+void AyuSettings::setSaveLocallyDeletedMessages(bool val) {
+	if (_saveLocallyDeletedMessages.current() == val) return;
+	_saveLocallyDeletedMessages = val;
 	save();
 }
 
@@ -1184,6 +1267,18 @@ void AyuSettings::setKeepDraftsLocal(bool val) {
 	save();
 }
 
+void AyuSettings::setStashHintShown(int val) {
+	if (_stashHintShown.current() == val) return;
+	_stashHintShown = val;
+	save();
+}
+
+void AyuSettings::setStashHintUsed(bool val) {
+	if (_stashHintUsed.current() == val) return;
+	_stashHintUsed = val;
+	save();
+}
+
 void AyuSettings::setReduceNetworkTracking(bool val) {
 	if (_reduceNetworkTracking.current() == val) return;
 	_reduceNetworkTracking = val;
@@ -1201,6 +1296,7 @@ void AyuSettings::setEnableDebugLogging(bool val) {
 	} else {
 		Logs::removeFiles();
 		AyuCrashTrace::Remove(directory);
+		QFile::remove(directory + u"/ayu_db_report.txt"_q);
 	}
 	save();
 }
@@ -1344,6 +1440,7 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"ghostModeSettings", ghostAccounts},
 		{"useGlobalGhostMode", s._useGlobalGhostMode.current()},
 		{"saveDeletedMessages", s._saveDeletedMessages.current()},
+		{"saveLocallyDeletedMessages", s._saveLocallyDeletedMessages.current()},
 		{"secretChatsEnabled", s._secretChatsEnabled.current()},
 		{"saveMessagesHistory", s._saveMessagesHistory.current()},
 		{"saveForBots", s._saveForBots.current()},
@@ -1442,6 +1539,8 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"showDeletedChatIcon", s._showDeletedChatIcon.current()},
 		{"localPinnedChats", s._localPinnedChats.current()},
 		{"keepDraftsLocal", s._keepDraftsLocal.current()},
+		{"stashHintShown", s._stashHintShown.current()},
+		{"stashHintUsed", s._stashHintUsed.current()},
 		{"reduceNetworkTracking", s._reduceNetworkTracking.current()},
 		{"enableDebugLogging", s._enableDebugLogging.current()},
 		{"markOldMessagesDeleted", s._markOldMessagesDeleted.current()},
@@ -1478,8 +1577,10 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 		}
 	}
 
+	s._accountsVaulted = j.value("accountsVaulted", false);
 	s._useGlobalGhostMode = j.value("useGlobalGhostMode", defaults._useGlobalGhostMode.current());
 	s._saveDeletedMessages = j.value("saveDeletedMessages", defaults._saveDeletedMessages.current());
+	s._saveLocallyDeletedMessages = j.value("saveLocallyDeletedMessages", defaults._saveLocallyDeletedMessages.current());
 	s._secretChatsEnabled = j.value("secretChatsEnabled", defaults._secretChatsEnabled.current());
 	s._saveMessagesHistory = j.value("saveMessagesHistory", defaults._saveMessagesHistory.current());
 	s._saveForBots = j.value("saveForBots", defaults._saveForBots.current());
@@ -1582,6 +1683,8 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._showDeletedChatIcon = j.value("showDeletedChatIcon", defaults._showDeletedChatIcon.current());
 	s._localPinnedChats = j.value("localPinnedChats", defaults._localPinnedChats.current());
 	s._keepDraftsLocal = j.value("keepDraftsLocal", defaults._keepDraftsLocal.current());
+	s._stashHintShown = j.value("stashHintShown", defaults._stashHintShown.current());
+	s._stashHintUsed = j.value("stashHintUsed", defaults._stashHintUsed.current());
 	s._reduceNetworkTracking = j.value("reduceNetworkTracking", defaults._reduceNetworkTracking.current());
 	s._enableDebugLogging = j.value("enableDebugLogging", defaults._enableDebugLogging.current());
 	s._markOldMessagesDeleted = j.value("markOldMessagesDeleted", defaults._markOldMessagesDeleted.current());

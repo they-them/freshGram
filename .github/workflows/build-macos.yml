@@ -33,6 +33,9 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  BUILD_CONFIG: ${{ (github.ref_type == 'tag' || github.event.inputs.release_tag != '') && 'Release' || 'Debug' }}
+
 jobs:
   libraries:
     name: macOS libraries
@@ -167,6 +170,7 @@ jobs:
           ./configure.sh \
             -D TDESKTOP_API_ID="$API_ID" \
             -D TDESKTOP_API_HASH="$API_HASH" \
+            -D CMAKE_CXX_FLAGS_DEBUG=-g1 \
             -D CMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} \
             -D CMAKE_OSX_DEPLOYMENT_TARGET=10.15 \
             -D DESKTOP_APP_DISABLE_AUTOUPDATE=ON \
@@ -176,32 +180,12 @@ jobs:
         run: |
           cd freshGram
           for attempt in 1 2 3; do
-            if cmake --build out --config Release --target Telegram; then
+            if cmake --build out --config "$BUILD_CONFIG" --target Telegram; then
               exit 0
             fi
             echo "::warning::Build attempt $attempt failed, trying again"
           done
           exit 1
-
-      - name: Package
-        run: |
-          set -e
-          app=$(find freshGram/out/Release -maxdepth 1 -name '*.app' | head -1)
-          test -n "$app"
-          mkdir -p dist dmg
-          rm -rf dmg/freshGram.app
-          cp -R "$app" dmg/freshGram.app
-          codesign --force --deep --sign - dmg/freshGram.app
-          ln -s /Applications dmg/Applications
-          hdiutil create -volname freshGram -srcfolder dmg -ov -format UDZO dist/freshGram-${{ matrix.suffix }}.dmg
-          (cd dist && shasum -a 256 freshGram-${{ matrix.suffix }}.dmg > SHA256SUMS-macos-${{ matrix.suffix }})
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: freshGram-macos-${{ matrix.suffix }}
-          path: dist/
-          retention-days: 7
 
       - name: Resolve release tag
         id: release
@@ -218,6 +202,51 @@ jobs:
             pre=true
           fi
           echo "prerelease=$pre" >> "$GITHUB_OUTPUT"
+
+      - name: Package
+        run: |
+          set -e
+          app=$(find "freshGram/out/$BUILD_CONFIG" -maxdepth 1 -name '*.app' | head -1)
+          test -n "$app"
+          icon="$app/Contents/Resources/AppIcon-Default.icns"
+          if [ ! -f "$icon" ]; then
+            echo "::error::The application icon is missing from the bundle: $icon"
+            exit 1
+          fi
+          mkdir -p dist dmg
+          if [ -n "${{ steps.release.outputs.tag }}" ]; then
+            mkdir -p debug-input
+            echo "${{ steps.release.outputs.tag }}" > debug-input/release-tag.txt
+            ditto -c -k --sequesterRsrc --keepParent "$app" "debug-input/freshGram-${{ matrix.suffix }}.app.zip"
+          fi
+          rm -rf dmg/freshGram.app
+          cp -R "$app" dmg/freshGram.app
+          binary=$(find dmg/freshGram.app/Contents/MacOS -type f | head -1)
+          before=$(stat -f %z "$binary")
+          strip -x "$binary" || echo "::warning::strip failed, packing the binary as it is"
+          echo "Stripped $binary: $before -> $(stat -f %z "$binary") bytes"
+          codesign --force --deep --sign - dmg/freshGram.app
+          ln -s /Applications dmg/Applications
+          cp "$icon" dmg/.VolumeIcon.icns
+          SetFile -a C dmg || echo "::warning::The volume icon flag was not set"
+          hdiutil create -volname freshGram -srcfolder dmg -ov -format UDZO dist/freshGram-${{ matrix.suffix }}.dmg
+          (cd dist && shasum -a 256 freshGram-${{ matrix.suffix }}.dmg > SHA256SUMS-macos-${{ matrix.suffix }})
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: freshGram-macos-${{ matrix.suffix }}
+          path: dist/
+          retention-days: 7
+
+      - name: Upload the debug input
+        if: steps.release.outputs.tag != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-debug-input-${{ matrix.suffix }}
+          path: debug-input/
+          retention-days: 14
+          compression-level: 0
 
       - name: Publish release
         if: steps.release.outputs.tag != ''

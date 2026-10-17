@@ -13,10 +13,12 @@
 #include "ayu/data/ayu_vault.h"
 #include "ayu/utils/ayu_mapper.h"
 #include "ayu/utils/telegram_helpers.h"
+#include "base/flat_set.h"
 #include "base/timer.h"
 #include "base/unixtime.h"
 #include "core/file_location.h"
 #include "logs.h"
+#include "crl/crl_async.h"
 #include "crl/crl_on_main.h"
 #include "data/data_cloud_file.h"
 #include "data/data_document.h"
@@ -31,12 +33,16 @@
 #include "history/history_item.h"
 #include "history/history_item_components.h"
 #include "history/history_item_reply_markup.h"
+#include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "storage/cache/storage_cache_database.h"
+#include "storage/file_download.h"
+#include "ui/toast/toast.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
+#include <QtCore/QSaveFile>
 
 #include <cstdlib>
 #include <optional>
@@ -72,6 +78,7 @@ struct DocumentSaveTask {
 std::vector<DeletedMessage> PendingDeleted;
 std::vector<DeletedExtra> PendingExtras;
 std::vector<DeletedMarkup> PendingMarkups;
+std::vector<DeletedRank> PendingRanks;
 bool FlushScheduled = false;
 std::vector<std::unique_ptr<PhotoSaveTask>> PhotoSaveTasks;
 std::vector<std::unique_ptr<DocumentSaveTask>> DocumentSaveTasks;
@@ -239,6 +246,9 @@ void flushPendingDeleted() {
 	auto markups = std::move(PendingMarkups);
 	PendingMarkups.clear();
 	AyuDatabase::addDeletedMarkups(markups);
+	auto ranks = std::move(PendingRanks);
+	PendingRanks.clear();
+	AyuDatabase::addDeletedRanks(ranks);
 }
 
 }
@@ -391,7 +401,7 @@ void PutPhotoBytesIntoCache(
 	const auto &bytes = *read;
 	const auto cacheKey = photo->location(
 		Data::PhotoSize::Large).file().cacheKey();
-	if (bytes.isEmpty() || !cacheKey) {
+	if (bytes.isEmpty() || !cacheKey || bytes.size() > Storage::kMaxFileInMemory) {
 		return;
 	}
 	photo->owner().cache().putIfEmpty(
@@ -401,17 +411,34 @@ void PutPhotoBytesIntoCache(
 			Data::kImageCacheTag));
 }
 
+namespace {
+
+struct LargeDocument {
+	DocumentId id = 0;
+	QString path;
+};
+
+base::flat_map<not_null<DocumentData*>, LargeDocument> LargeDocuments;
+base::flat_set<QString> PendingCopies;
+
+[[nodiscard]] QString OpenedMediaDirectory() {
+	return QStringLiteral("./tdata/ayu_media_tmp");
+}
+
+} // namespace
+
 void PutDocumentBytesIntoCache(
 		not_null<DocumentData*> document,
 		const QString &path) {
+	if (QFileInfo(path).size() > Storage::kMaxFileInMemory) {
+		LargeDocuments[document] = { document->id, path };
+		return;
+	}
 	const auto read = AyuVault::ReadFile(path);
-	if (!read) {
+	if (!read || read->isEmpty()) {
 		return;
 	}
 	const auto &bytes = *read;
-	if (bytes.isEmpty()) {
-		return;
-	}
 	document->owner().cache().putIfEmpty(
 		document->cacheKey(),
 		Storage::Cache::Database::TaggedValue(
@@ -616,6 +643,16 @@ void addDeletedMessage(not_null<HistoryItem*> item) {
 			.entityCreateDate = base::unixtime::now(),
 		});
 	}
+	if (const auto rank = item->fromRank(); !rank.isEmpty()) {
+		PendingRanks.push_back({
+			.fakeId = 0,
+			.userId = message.userId,
+			.dialogId = message.dialogId,
+			.messageId = message.messageId,
+			.rank = rank.toStdString(),
+			.entityCreateDate = base::unixtime::now(),
+		});
+	}
 	PendingDeleted.push_back(std::move(message));
 	AyuRestore::noteDeleted(item->history());
 	if (!FlushScheduled) {
@@ -663,6 +700,10 @@ std::vector<DeletedExtra> loadDeletedExtras(ID userId, ID dialogId) {
 
 std::vector<DeletedMarkup> loadDeletedMarkups(ID userId, ID dialogId) {
 	return AyuDatabase::getDeletedMarkups(userId, dialogId);
+}
+
+std::vector<DeletedRank> loadDeletedRanks(ID userId, ID dialogId) {
+	return AyuDatabase::getDeletedRanks(userId, dialogId);
 }
 
 void restoreExtra(not_null<HistoryItem*> item, const DeletedExtra &extra) {
@@ -746,7 +787,64 @@ void clearUserMedia(ID userId) {
 	}
 }
 
+void clearOpenedMedia() {
+	QDir(OpenedMediaDirectory()).removeRecursively();
+	LargeDocuments.clear();
+}
+
+// WHY: the cache takes up to 10 MB per value, so a bigger file is
+// decrypted on the click into a copy that is removed on exit.
+bool prepareLargeMedia(not_null<DocumentData*> document) {
+	const auto i = LargeDocuments.find(document);
+	if (i == LargeDocuments.end() || i->second.id != document->id) {
+		return false;
+	}
+	[[maybe_unused]] static const auto cleaned = [] {
+		QDir(OpenedMediaDirectory()).removeRecursively();
+		return true;
+	}();
+	const auto path = i->second.path;
+	const auto target = QDir(OpenedMediaDirectory()).absoluteFilePath(
+		QFileInfo(path).completeBaseName()
+		+ '.'
+		+ QFileInfo(document->filename()).suffix());
+	if (QFile::exists(target)) {
+		if (document->filepath().isEmpty()) {
+			document->setLocation(Core::FileLocation(target));
+			document->session().data().requestDocumentViewRepaint(document);
+			return true;
+		}
+		return false;
+	}
+	if (!PendingCopies.emplace(target).second) {
+		return true;
+	}
+	Ui::Toast::Show(tr::ayu_DeletedMediaDecrypting(tr::now));
+	crl::async([=, session = &document->session()] {
+		const auto read = AyuVault::ReadFile(path);
+		auto done = false;
+		if (read && !read->isEmpty()) {
+			QDir().mkpath(QFileInfo(target).absolutePath());
+			auto file = QSaveFile(target);
+			done = file.open(QIODevice::WriteOnly)
+				&& file.write(*read) == read->size()
+				&& file.commit();
+		}
+		crl::on_main([=] { PendingCopies.remove(target); });
+		crl::on_main(session, [=] {
+			if (!done) {
+				Ui::Toast::Show(tr::ayu_DeletedMediaDecryptFailed(tr::now));
+				return;
+			}
+			document->setLocation(Core::FileLocation(target));
+			session->data().requestDocumentViewRepaint(document);
+		});
+	});
+	return true;
+}
+
 void clearEverything() {
+	clearOpenedMedia();
 	flushPendingDeleted();
 	AyuDatabase::clearEverything();
 	clearSavedMedia();

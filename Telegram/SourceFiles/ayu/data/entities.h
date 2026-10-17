@@ -8,55 +8,7 @@
 
 #include <string>
 
-using ID = long long;
-
-class AyuMessageBase
-{
-public:
-	ID fakeId;
-	ID userId;
-	ID dialogId;
-	ID groupedId;
-	ID peerId;
-	ID fromId;
-	ID topicId;
-	int messageId;
-	int date;
-	int flags;
-	int editDate;
-	int views;
-	int fwdFlags;
-	ID fwdFromId;
-	std::string fwdName;
-	int fwdDate;
-	std::string fwdPostAuthor;
-	std::string postAuthor;
-	int replyFlags;
-	int replyMessageId;
-	ID replyPeerId;
-	int replyTopId;
-	bool replyForumTopic;
-	std::vector<char> replySerialized;
-	std::vector<char> replyMarkupSerialized;
-	int entityCreateDate;
-	std::string text;
-	std::vector<char> textEntities;
-	std::string mediaPath;
-	std::string hqThumbPath;
-	int documentType;
-	std::vector<char> documentSerialized;
-	std::vector<char> thumbsSerialized;
-	std::vector<char> documentAttributesSerialized;
-	std::string mimeType;
-};
-
-class DeletedMessage : public AyuMessageBase
-{
-};
-
-class EditedMessage : public AyuMessageBase
-{
-};
+#include "ayu/data/message_types.h"
 
 // Reactions and comments of a deleted message, they are kept apart from
 // the main row, so that the table of deleted messages stays compatible.
@@ -86,6 +38,30 @@ public:
 	ID dialogId;
 	int messageId;
 	std::vector<char> markup;
+	int entityCreateDate;
+};
+
+// The tag of the author of a deleted message, kept in its own table.
+class DeletedRank
+{
+public:
+	ID fakeId;
+	ID userId;
+	ID dialogId;
+	int messageId;
+	std::string rank;
+	int entityCreateDate;
+};
+
+class ComposeStashRow
+{
+public:
+	ID fakeId;
+	ID userId;
+	ID dialogId;
+	ID topicRootId;
+	ID monoforumPeerId;
+	std::vector<char> payload;
 	int entityCreateDate;
 };
 

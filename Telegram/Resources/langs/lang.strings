@@ -8820,6 +8820,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_SuggestGhostModeBeforeViewingStoryDescription" = "Displays an alert before opening a story, suggesting you enable Ghost Mode.";
 "ayu_SpyEssentialsHeader" = "Spy essentials";
 "ayu_SaveDeletedMessages" = "Save Deleted Messages";
+"ayu_SaveLocallyDeletedMessages" = "Save Messages Deleted by You";
 "ayu_SaveMessagesHistory" = "Save Edits History";
 "ayu_MessageSavingSaveMedia" = "Save Attachments";
 "ayu_MessageSavingSaveMediaHint" = "Configure chats & limits";
@@ -9134,6 +9135,23 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_ClearDeletedMessagesActionText" = "Clear";
 "ayu_DeleteOwnMessages" = "Delete own messages";
 "ayu_DeleteOwnMessagesConfirmation" = "Are you sure you want to delete all your messages from this group?";
+"ayu_DeleteOwnMessagesAll" = "All messages";
+"ayu_DeleteOwnMessagesPeriod" = "Messages for the past period";
+"ayu_DeleteOwnMessagesHours" = "Hours";
+"ayu_DeleteOwnMessagesDays" = "Days";
+"ayu_DeleteOwnMessagesWeeks" = "Weeks";
+"ayu_DeleteOwnMessagesMonths" = "Months";
+"ayu_DeleteOwnMessagesRange" = "Messages from a date range";
+"ayu_DeleteOwnMessagesFrom" = "From";
+"ayu_DeleteOwnMessagesTo" = "To";
+"ayu_DeleteOwnMessagesLastCount" = "The last messages";
+"ayu_DeleteOwnMessagesNumber" = "Number";
+"ayu_DeleteOwnMessagesInvalid" = "Check the entered values.";
+"ayu_DeleteOwnMessagesConfirmationFiltered" = "Are you sure you want to delete the selected messages of yours from this group?";
+"ayu_DeleteOwnMessagesScopeAll" = "Entire group";
+"ayu_DeleteOwnMessagesScopeTopics" = "Selected topics";
+"ayu_DeleteOwnMessagesPickTopics" = "Choose topics";
+"ayu_DeleteOwnMessagesTopicsCount" = "Topics selected: {amount}";
 "ayu_SuggestGhostModeTitle" = "Ghost Mode";
 "ayu_SuggestGhostModeStoryText" = "Do you want to enable **Ghost Mode** before viewing the story?";
 "ayu_SuggestGhostModeStoryActionTextYes" = "Yes";
@@ -9155,6 +9173,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_CustomizeFontTitle" = "Customize Font";
 "ayu_MessageShotTopBarText" = "Shot";
 "ayu_MessageShotPreview" = "Preview";
+"ayu_SecretTranslateWarning" = "The text of these messages will be sent to {provider} for translation. Continue?";
+"ayu_SecretTranslateCustomServer" = "your custom server";
+"ayu_SecretTranslateSystem" = "the system translator";
 "ayu_PeekButton" = "Peek last seen";
 "ayu_PeekLabel" = "Last seen (peeked)";
 "ayu_PeekChecking" = "Checking the last seen...";
@@ -9299,6 +9320,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_NetworkPrivacyDescription" = "Unsent drafts stay on this device and are not uploaded to Telegram, so other devices do not see them.\n\nWith reduced network tracking the connection key is renewed every hour instead of every 24 hours, so someone watching the network cannot follow your device by it for long. It means more handshakes and a short reconnect each hour, and it applies to new keys. If the server refuses, longer periods are used.";
 "ayu_EnableDebugLogging" = "Enable debug logging";
 "ayu_DebugLoggingDescription" = "Writes log.txt and crash_trace.txt to the data folder. They help to find bugs but may contain chat names, file paths and other private details, so keep it off unless you need it. Turning it off deletes these files.";
+"ayu_DatabaseReport" = "Database report";
+"ayu_DatabaseReportStarted" = "Building the database report...";
+"ayu_DatabaseReportSaved" = "The report is saved to tdata/ayu_db_report.txt";
+"ayu_DatabaseReportFailed" = "Failed to save the database report";
 
 "ayu_MarkOldMessagesDeleted" = "Mark old messages deleted when a chat is deleted";
 "ayu_DeletedChatsDescription" = "A deleted topic stays in the list marked as deleted, with its loaded messages. Turning an option off does not delete saved data; it is applied again when you turn it on. Changes in the kept chats apply after a restart. If deleted messages are not shown in chats, they are still saved and available in \"View deleted messages\".";
@@ -9307,6 +9332,12 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_DeletedRestoreLimit" = "Deleted messages loaded per chat";
 "ayu_KeptSnapshotLimit" = "Messages saved when leaving a chat";
 "ayu_DeletedMediaMaxSize" = "Max size of saved deleted media";
+"ayu_DeletedMediaDecrypting" = "Preparing the saved file...";
+"ayu_DeletedMediaDecryptFailed" = "Could not read the saved file.";
+"ayu_ShortcutStash" = "Stash or restore message";
+"ayu_StashRestore" = "Restore stashed message";
+"ayu_StashFilesLimit" = "Too many or too large files to stash.";
+"ayu_StashHint" = "Press {shortcut} to stash this draft.";
 "ayu_KeepDeletedDays" = "Keep deleted messages and edits for";
 "ayu_BackupKeepCount" = "Database backups to keep";
 "ayu_BackupInterval" = "Database backup every";

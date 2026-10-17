@@ -264,6 +264,7 @@ public:
 
 	static void load();
 	static void save();
+	static void attachVault();
 	static void reset();
 
 	[[nodiscard]] static GhostModeAccountSettings &ghost(not_null<Main::Session*> session);
@@ -284,6 +285,7 @@ public:
 	void validate();
 
 	[[nodiscard]] bool saveDeletedMessages() const { return _saveDeletedMessages.current(); }
+	[[nodiscard]] bool saveLocallyDeletedMessages() const { return _saveLocallyDeletedMessages.current(); }
 	[[nodiscard]] bool secretChatsEnabled() const { return _secretChatsEnabled.current(); }
 	[[nodiscard]] rpl::producer<bool> secretChatsEnabledValue() const { return _secretChatsEnabled.value(); }
 	[[nodiscard]] bool saveMessagesHistory() const { return _saveMessagesHistory.current(); }
@@ -394,8 +396,11 @@ public:
 	[[nodiscard]] bool showDeletedChatIcon() const { return _showDeletedChatIcon.current(); }
 	[[nodiscard]] bool localPinnedChats() const { return _localPinnedChats.current(); }
 	[[nodiscard]] bool keepDraftsLocal() const { return _keepDraftsLocal.current(); }
+	[[nodiscard]] int stashHintShown() const { return _stashHintShown.current(); }
+	[[nodiscard]] bool stashHintUsed() const { return _stashHintUsed.current(); }
 	[[nodiscard]] bool reduceNetworkTracking() const { return _reduceNetworkTracking.current(); }
 	[[nodiscard]] bool enableDebugLogging() const { return _enableDebugLogging.current(); }
+	[[nodiscard]] rpl::producer<bool> enableDebugLoggingValue() const { return _enableDebugLogging.value(); }
 	[[nodiscard]] bool markOldMessagesDeleted() const { return _markOldMessagesDeleted.current(); }
 	[[nodiscard]] bool showTimeZone() const { return _showTimeZone.current(); }
 	[[nodiscard]] bool showMessageShot() const { return _showMessageShot.current(); }
@@ -416,6 +421,7 @@ public:
 	[[nodiscard]] bool streamerSpoilers() const { return _streamerSpoilers.current(); }
 
 	void setSaveDeletedMessages(bool val);
+	void setSaveLocallyDeletedMessages(bool val);
 	void setSecretChatsEnabled(bool val);
 	void setSaveMessagesHistory(bool val);
 	void setSaveForBots(bool val);
@@ -513,6 +519,8 @@ public:
 	void setShowDeletedChatIcon(bool val);
 	void setLocalPinnedChats(bool val);
 	void setKeepDraftsLocal(bool val);
+	void setStashHintShown(int val);
+	void setStashHintUsed(bool val);
 	void setReduceNetworkTracking(bool val);
 	void setEnableDebugLogging(bool val);
 	void setMarkOldMessagesDeleted(bool val);
@@ -538,6 +546,8 @@ public:
 	[[nodiscard]] rpl::producer<bool> useGlobalGhostModeChanges() const { return _useGlobalGhostMode.changes(); }
 	[[nodiscard]] rpl::producer<bool> saveDeletedMessagesValue() const { return _saveDeletedMessages.value(); }
 	[[nodiscard]] rpl::producer<bool> saveDeletedMessagesChanges() const { return _saveDeletedMessages.changes(); }
+	[[nodiscard]] rpl::producer<bool> saveLocallyDeletedMessagesValue() const { return _saveLocallyDeletedMessages.value(); }
+	[[nodiscard]] rpl::producer<bool> saveLocallyDeletedMessagesChanges() const { return _saveLocallyDeletedMessages.changes(); }
 	[[nodiscard]] rpl::producer<bool> saveMessagesHistoryValue() const { return _saveMessagesHistory.value(); }
 	[[nodiscard]] rpl::producer<bool> saveMessagesHistoryChanges() const { return _saveMessagesHistory.changes(); }
 	[[nodiscard]] rpl::producer<bool> saveForBotsValue() const { return _saveForBots.value(); }
@@ -730,10 +740,12 @@ private:
 	[[nodiscard]] uint64 getOverriddenGhostUserId(uint64 userId) const { return _useGlobalGhostMode.current() ? 0 : userId; }
 
 	rpl::variable<bool> _saveDeletedMessages = true;
+	rpl::variable<bool> _saveLocallyDeletedMessages = true;
 	rpl::variable<bool> _secretChatsEnabled = false;
 	rpl::variable<bool> _saveMessagesHistory = true;
 	rpl::variable<bool> _saveForBots = false;
 	std::unordered_set<int64> _shadowBanIds;
+	bool _accountsVaulted = false;
 	rpl::variable<bool> _filtersEnabled = false;
 	rpl::variable<bool> _filtersEnabledInChats = false;
 	rpl::variable<bool> _hideFromBlocked = false;
@@ -828,6 +840,8 @@ private:
 	rpl::variable<bool> _showDeletedChatIcon = true;
 	rpl::variable<bool> _localPinnedChats = true;
 	rpl::variable<bool> _keepDraftsLocal = false;
+	rpl::variable<int> _stashHintShown = 0;
+	rpl::variable<bool> _stashHintUsed = false;
 	rpl::variable<bool> _reduceNetworkTracking = false;
 	rpl::variable<bool> _enableDebugLogging = false;
 	rpl::variable<bool> _markOldMessagesDeleted = true;
@@ -848,6 +862,8 @@ private:
 	rpl::variable<bool> _streamerMode = false;
 	rpl::variable<bool> _streamerHideWholeWindow = true;
 	rpl::variable<bool> _streamerSpoilers = true;
+
+	static void applyForcedGhost();
 
 	rpl::variable<bool> _useGlobalGhostMode = true;
 	std::map<uint64, std::unique_ptr<GhostModeAccountSettings>> _ghostAccounts;
